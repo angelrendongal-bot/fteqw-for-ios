@@ -1,0 +1,37 @@
+name: Build FTEQW iOS IPA
+
+on: 
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install SDL3 and MoltenVK
+        run: |
+          brew install sdl3 molten-vk
+          # Fix profile dir for iOS 18 (tu bug)
+          sed -i '' 's|Sys_GetUserdir.*|SDL_GetPrefPath("fte","q1")|g' engine/common/sys_sdl.c || true
+
+      - name: Build iOS App (No Signing)
+        run: |
+          cd engine
+          # Compila con el proyecto de iOS que ya trae FTEQW
+          xcodebuild -project fteqw.xcodeproj -scheme fteqw -sdk iphoneos -configuration Release CODE_SIGNING_ALLOWED=NO -derivedDataPath build || \
+          # Si no hay xcodeproj, compila con make para iOS
+          make -f Makefile.iOS FTE_TARGET=ios -j4
+
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/*.app Payload/ 2>/dev/null || cp -R *.app Payload/ 2>/dev/null || cp -R fteqw.app Payload/
+          zip -r FTEQW-iOS-GustamboFix.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: FTEQW-iOS-IPA
+          path: '**/*.ipa'
